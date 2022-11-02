@@ -1,12 +1,13 @@
 class ComicPanel:
     PAGE_GRID_PERCENT = 0.05
+
     def __init__(self, boundingRect, countours):
         # Bouding box of the panel
         self.boundingRect = boundingRect
         # Countrous of the panel shape. Intended for complexed panels.
         self.countours = countours
 
-        self.x  = boundingRect[0]
+        self.x = boundingRect[0]
         self.y = boundingRect[1]
 
     def setPageWidth(self, imageW):
