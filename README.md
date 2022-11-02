@@ -2,9 +2,18 @@
 
 Forked from <https://github.com/CodeMinion/C.A.P.E>
 
-**C.A.P.E.** is a smart editor to reduce the time taken to extract comic book panel information from comic books. This extracted information is then stored as part of the comic book digital file and can be used by reader applications to created a guided reading experience for the users. By leveraging the computer extracted information we can hope to reduce the overall time to extract the panels from a comic by a magnitude of what it would take for a human alone.
+**C.A.P.E.** is a Python package used to extract individual panels from comic book pages.
 
-# Metadata Structure
+### Features
+
+-   Extract individual panels.
+-   Save the positions of the panels in a metadata file for use in other programs.
+
+### Summary
+
+C.A.P.E is a smart editor to reduce the time taken to extract comic book panel information from comic books. This extracted information is then stored as part of the comic book digital file and can be used by reader applications to created a guided reading experience for the users. By leveraging the computer extracted information we can hope to reduce the overall time to extract the panels from a comic by a magnitude of what it would take for a human alone.
+
+## Metadata Structure
 
 After the first pass the panel recognizer outputs a metadata file for each of the comic pages analyzed. This metadata is stored alongside each page with the same name and the extension `.cpanel`.
 
