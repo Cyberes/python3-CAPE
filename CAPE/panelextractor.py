@@ -53,9 +53,9 @@ def has_dark_borders(image, threshold):
             maxColorIndex = colorIndex
             maxColorValue = colorValue
 
-    print('max color index:', maxColorIndex)
+    # print('max color index:', maxColorIndex)
     hasDarkBordered = maxColorIndex < threshold
-    print('has dark borders:', hasDarkBordered)
+    # print('has dark borders:', hasDarkBordered)
 
     return hasDarkBordered, maxColorIndex
 
@@ -84,7 +84,7 @@ def is_bright_panel(theshImg, threshold):
     maxColorPercent = (maxColorValue / (theshImg.shape[0] * theshImg.shape[1])) * 100
     isBrightPanel = maxColorIndex > 0 and maxColorPercent > threshold
 
-    print(maxColorIndex, isBrightPanel, maxColorPercent)
+    # print(maxColorIndex, isBrightPanel, maxColorPercent)
 
     return isBrightPanel, maxColorIndex
 
@@ -124,7 +124,27 @@ def find_comic_panels(image):
 
     isBlackBordered, maxColorIndex = has_dark_borders(gray, 50)
 
-    print(isBlackBordered, maxColorIndex)
+    # If it's got black borders, make the black transparent
+    if isBlackBordered:
+        # tmp = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
+        # _, alpha = cv2.threshold(tmp, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+        # b, g, r = cv2.split(resized)
+        # rgba = [b, g, r, alpha]
+        # dst = cv2.merge(rgba, 4)
+        #
+        # # make mask of where the transparent bits are
+        # trans_mask = dst[:, :, 3] == 0
+        # # replace areas of transparency with white and not transparent
+        # dst[trans_mask] = [255, 255, 255, 255]
+        # # new image without alpha channel...
+        # new_img = cv2.cvtColor(dst, cv2.COLOR_BGRA2BGR)
+
+        new_img = cv2.bitwise_not(resized)
+        gray = cv2.cvtColor(new_img, cv2.COLOR_BGR2GRAY)
+        isBlackBordered, maxColorIndex = has_dark_borders(gray, 50)
+        isBlackBordered = "background"
+
+    # print(isBlackBordered, maxColorIndex)
 
     borderColor = [255, 255, 255]
     if isBlackBordered:
@@ -136,45 +156,45 @@ def find_comic_panels(image):
                                  border_padding, border_padding, cv2.BORDER_CONSTANT, value=borderColor)
 
     gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
-    blurred = gray
+    blur = cv2.medianBlur(gray, 5)
+    sharpen_kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
+    blurred = cv2.filter2D(blur, -1, sharpen_kernel)
 
-    if debug:
-        cv2.imshow("Gray", blurred)
-
-    if isBlackBordered:
+    # if debug:
+    #     cv2.imshow("Gray", blurred)
+    if isBlackBordered is True:
         # Use this for pages that have black borders.
         # thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV)[1]
         thresh = cv2.threshold(blurred, maxColorIndex + 1, 255, cv2.THRESH_BINARY_INV)[1]
     # thresh = cv2.threshold(blurred, maxColorIndex, 255, cv2.THRESH_BINARY_INV)[1]
-    else:
+    elif isBlackBordered is False:
         # Use this for standard pages that have white borders.
         thresh = cv2.threshold(blurred, maxColorIndex - 1, 255, cv2.THRESH_BINARY)[1]
-
-    if debug:
-        cv2.imshow("Image", thresh)
-        cv2.waitKey(0)
+    elif isBlackBordered == "background":
+        # This seems to work...
+        ret, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
     goal = GOOD_PANELS_GOAL  # 4 # desired arbitrary panel count $ Consider 5
-    comicPanels = find_best_panels(image, resized, thresh, ratio, goal, 0, 4)
+    black_bg = True if isBlackBordered == "background" else False
+    comicPanels = find_best_panels(image, resized, thresh, ratio, goal, 0, 4, black_bg)
 
-    print(is_good_layout(comicPanels, image.shape))
+    # print(is_good_layout(comicPanels, image.shape))
 
     # Reverse to get a left to right ordering of the panels
     # comicPanles = comicPanels.reverse()
     # Enhanced for sorting Manga.
     # Sort the panels from left ot right
     comicPanels = sorted(comicPanels, key=attrgetter('gridY', 'gridX'))
+    # print(comicPanels)
 
     return comicPanels
 
 
-def find_best_panels(image, resized, thresh, ratio, goal, leftIternations, rightIterations):
+def find_best_panels(image, resized, thresh, ratio, goal, leftIternations, rightIterations, black_bg=False):
+    global error_iter
     currentPanelCount = 0
-
     comicPanels = []
-
     bestIteration = 0
-
     isBright = is_bright_panel(thresh, 65)[0]
 
     i = 0
@@ -182,7 +202,8 @@ def find_best_panels(image, resized, thresh, ratio, goal, leftIternations, right
         midIters = leftIternations + (rightIterations - leftIternations) / 2
 
         comicPanels = extract_comic_panels(resized.copy(), thresh, ratio, midIters, isBright)
-        print("Pass Completed " + str(midIters))
+        # print("Pass Completed " + str(midIters))
+        # print(comicPanels)
 
         panelsFound = len(comicPanels)
 
@@ -200,7 +221,6 @@ def find_best_panels(image, resized, thresh, ratio, goal, leftIternations, right
                 leftIternations = midIters
 
         else:
-
             if panelsFound >= goal:
                 return comicPanels
             elif not is_good_layout(comicPanels, image.shape):
@@ -210,13 +230,14 @@ def find_best_panels(image, resized, thresh, ratio, goal, leftIternations, right
             else:
                 rightIterations = midIters
 
-            # Prevent infinite loops
-            if i > error_iter:
-                return comicPanels
-            i += 1
+        # Prevent infinite loops
+        if i > error_iter:
+            return comicPanels
+        i += 1
             # print('panels found:', panelsFound)
 
-    comicPanels = extract_comic_panels(resized.copy(), thresh, ratio, bestIteration, isBright)
+    dont_erode = True if black_bg else False
+    comicPanels = extract_comic_panels(resized.copy(), thresh, ratio, bestIteration, isBright, dont_erode)
 
     return comicPanels
 
@@ -274,7 +295,7 @@ def is_questionable_panel(x, y, w, h, image):
     return panelArea >= imageArea * 0.5
 
 
-def extract_comic_panels(resized, thresh, ratio, iter_num, isBright):
+def extract_comic_panels(resized, thresh, ratio, iter_num, isBright, dont_erode=False):
     """
     Helper function to extract comic panels from a given comic page.
     """
@@ -283,30 +304,35 @@ def extract_comic_panels(resized, thresh, ratio, iter_num, isBright):
     # Erode to remove separete mixed panels.
     kernel = np.ones((2, 2), np.uint8)
 
+    # if not dont_erode:
     if isBright:
         dilation = cv2.dilate(thresh, kernel, iterations=1)
         eroded = cv2.erode(dilation, kernel, iterations=int(iter_num))
-
     else:
         dilation = cv2.dilate(thresh, kernel, iterations=int(iter_num))  # // Dialation ranges from 1 to 4.
         eroded = dilation  # thresh #dilation
+    # else:
+    #     eroded = thresh
 
     # dilation = cv2.dilate(thresh,kernel,iterations = 1)#4) // Dialation ranges from 1 to 4.
     # eroded = cv2.erode(dilation,kernel,iterations = iter) #thresh #dilation
     # eroded = cv2.erode(dilation,kernel,iterations = 1)
 
-    if debug:
-        cv2.imshow("Eroded", eroded)
-        cv2.waitKey(0)
+    # cv2.imwrite("eroded.png", eroded)
 
-    print(cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+    # if debug:
+    #     cv2.imshow("Eroded", eroded)
+    #     cv2.waitKey(0)
+
+    # print(cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
     cnts, hierarchy = cv2.findContours(eroded.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
 
     cv2.drawContours(resized, cnts, -1, (0, 255, 0), 3)
 
-    if debug:
-        cv2.imshow("Image", resized)
-        cv2.waitKey(0)
+    # cv2.imwrite("resized.png", resized)
+    # if debug:
+    #     cv2.imshow("Image", resized)
+    #     cv2.waitKey(0)
 
     # Area occupied by a possible large panel
     largePanelArea = 0
@@ -339,7 +365,7 @@ def extract_comic_panels(resized, thresh, ratio, iter_num, isBright):
 
         questionable = is_questionable_panel(x, y, w, h, blank_image)
 
-        print('Image size', blank_image.shape)
+        # print('Image size', blank_image.shape)
         # Calculate the size of the smallest edge size to discard
         # We assume this to be left over edges connecting disconnected shapes.
         MIN_DISCARD_EDGE_LENGTH = blank_image.shape[1] * 0.07
@@ -352,7 +378,7 @@ def extract_comic_panels(resized, thresh, ratio, iter_num, isBright):
                 # Draw the panel for the next phase
                 cv2.rectangle(blank_image, (x, y), (x + w, y + h), (0, 255, 0), -1)
                 largePanelArea += (w * h)
-                print(largePanelArea)
+                # print(largePanelArea)
             # cv2.imshow("Image", blank_image)
             # cv2.waitKey(0)
             else:
@@ -397,16 +423,16 @@ def extract_comic_panels(resized, thresh, ratio, iter_num, isBright):
 
         draw_delaunay( blank_image, subdiv, (0, 255, 255) );
         '''
-        if debug:
-            cv2.imshow("Image", blank_image)
-            cv2.waitKey(0)
+        # if debug:
+        #     cv2.imshow("Image", blank_image)
+        #     cv2.waitKey(0)
 
     # cv2.imshow("Image", blank_image)
     # cv2.waitKey(0)
 
-    if debug:
-        cv2.imshow("Image", blank_image)
-        cv2.waitKey(0)
+    # if debug:
+    #     cv2.imshow("Image", blank_image)
+    #     cv2.waitKey(0)
 
     # -----
 
@@ -439,7 +465,7 @@ def extract_comic_panels(resized, thresh, ratio, iter_num, isBright):
     # Assuming we can have very thin panels, this seems to be the best
     # amount that would allow for comfortable read.
 
-    print(largePanelArea)
+    # print(largePanelArea)
     minAllowedPanelSize = ((originalH * originalW) - (largePanelArea * ratio * ratio)) / MAX_PANELS_IN_PAGE
 
     # loop over the contours
@@ -488,7 +514,7 @@ def extract_comic_panels(resized, thresh, ratio, iter_num, isBright):
         frameArea = w * h
         # TODO Adjust minAllowed area by taking into account if a valid large panel was accepted
         if frameArea < minAllowedPanelSize:
-            print('Skipping Panel - Allowed Area:' + str(minAllowedPanelSize) + ' - ' + str(frameArea))
+            # print('Skipping Panel - Allowed Area:' + str(minAllowedPanelSize) + ' - ' + str(frameArea))
             continue
 
         rect = (x, y, w, h)
@@ -498,7 +524,7 @@ def extract_comic_panels(resized, thresh, ratio, iter_num, isBright):
         comicPanel.setPageHeight(originalH)
         panelShapes.append(comicPanel)
 
-    print(len(panelShapes))
+    # print(len(panelShapes))
 
     return panelShapes
 

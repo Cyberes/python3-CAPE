@@ -10,12 +10,26 @@ This is the main file and holds all the functions a user will interact with.
 """
 
 
+def crop_black_borders(file_path, out_path):
+    """
+    EXPERIMENTAL
+    Crop the black borders from an image file.
+    :param file_path:
+    :param out_path:
+    :return:
+    """
+    img = cv2.imread(file_path)
+    trim = trim_recursive(img)
+    cv2.imwrite(out_path, trim)
+
+
 def metadata(comic_panel_path, save_path=False):
     """
-    Processes a single comic panel
-    @param comic_panel_path to the comic panel file.
+    Process a single comic panel
+    :param comic_panel_path:
+    :param save_path:
+    :return:
     """
-
     image = cv2.imread(comic_panel_path)
 
     comic_panels = find_comic_panels(image)
@@ -48,47 +62,50 @@ def metadata(comic_panel_path, save_path=False):
 def crop_page(image_path, output_dir, save_metadata=False):
     """
     Analyze and crop a single page.
+    :param image_path:
     :param output_dir:
-    :param path: Path to an image file.
+    :param save_metadata:
     :return:
     """
     if not os.path.isfile(image_path):
         raise Exception(f'Not a file: {image_path}')
 
-    metadata = generate_metadata(image_path, save_metadata)
+    mdata = metadata(image_path, save_metadata)
 
-    image_dir = image_path
-    image_filename = ''
+    # image_dir = image_path
+    # image_filename = ''
 
-    if metadata['version'] > 1:
-        image_filename = metadata['imagePath']
+    if mdata['version'] > 1:
+        image_filename = mdata['imagePath']
     else:
         # TODO Get image from path ?
         pass
 
-    loaded_image = cv2.imread(os.path.join(image_dir, image_filename))
+    loaded_image = cv2.imread(image_path)
 
     # For every panel crop panels
-    panels = metadata['panels']
+    panels = mdata['panels']
     for index, panel in enumerate(panels):
         box = panel['box']
         x = int(box['x'])
         y = int(box['y'])
         w = int(box['w'])
         h = int(box['h'])
-        print(box)
+        # print(box)
         panel_img = loaded_image[y: y + h, x: x + w]
-        if debug:
-            cv2.imshow("Panel", panel_img)
-            cv2.waitKey(0)
+
         # Save every panel under filename_panelIndex.imageExtension
-        filename, ext = os.path.splitext(image_filename)
+        filename, ext = os.path.splitext(os.path.split(image_path)[-1])
         out_file = filename + '_' + str(index).zfill(3) + ext
 
-        if not os.path.isdir(dest_dir):
-            raise Exception(f'Output directory does not exist: {dest_dir}')
+        if not os.path.isdir(output_dir):
+            raise Exception(f'Output directory does not exist: {output_dir}')
 
-        out_path = os.path.join(dest_dir, out_file)
+        out_path = os.path.join(output_dir, out_file)
         cv2.imwrite(out_path, panel_img)
-    # pass
+
+        cropped_filename, cropped_ext = os.path.splitext(os.path.split(out_file)[-1])
+        cropped_out_path = os.path.join(output_dir, f'{cropped_filename}_cropped{cropped_ext}')
+
+        # crop_black_borders(out_path, cropped_out_path)
     return len(panels)
