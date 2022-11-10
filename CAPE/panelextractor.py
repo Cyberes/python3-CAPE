@@ -124,31 +124,26 @@ def find_comic_panels(image):
 
     isBlackBordered, maxColorIndex = has_dark_borders(gray, 50)
 
-    # If it's got black borders, make the black transparent
+    # If it's got black borders, invert the colors
     if isBlackBordered:
         # tmp = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
         # _, alpha = cv2.threshold(tmp, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
         # b, g, r = cv2.split(resized)
         # rgba = [b, g, r, alpha]
         # dst = cv2.merge(rgba, 4)
-        #
         # # make mask of where the transparent bits are
         # trans_mask = dst[:, :, 3] == 0
         # # replace areas of transparency with white and not transparent
         # dst[trans_mask] = [255, 255, 255, 255]
         # # new image without alpha channel...
         # new_img = cv2.cvtColor(dst, cv2.COLOR_BGRA2BGR)
-
         new_img = cv2.bitwise_not(resized)
         gray = cv2.cvtColor(new_img, cv2.COLOR_BGR2GRAY)
         isBlackBordered, maxColorIndex = has_dark_borders(gray, 50)
         isBlackBordered = "background"
-
-    # print(isBlackBordered, maxColorIndex)
-
-    borderColor = [255, 255, 255]
-    if isBlackBordered:
         borderColor = [0, 0, 0]
+    else:
+        borderColor = [255, 255, 255]
 
     # Put back to handle unclosed panels.
     resized = cv2.copyMakeBorder(resized,
@@ -160,19 +155,15 @@ def find_comic_panels(image):
     sharpen_kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
     blurred = cv2.filter2D(blur, -1, sharpen_kernel)
 
-    # if debug:
-    #     cv2.imshow("Gray", blurred)
     if isBlackBordered is True:
         # Use this for pages that have black borders.
-        # thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV)[1]
         thresh = cv2.threshold(blurred, maxColorIndex + 1, 255, cv2.THRESH_BINARY_INV)[1]
-    # thresh = cv2.threshold(blurred, maxColorIndex, 255, cv2.THRESH_BINARY_INV)[1]
     elif isBlackBordered is False:
         # Use this for standard pages that have white borders.
         thresh = cv2.threshold(blurred, maxColorIndex - 1, 255, cv2.THRESH_BINARY)[1]
     elif isBlackBordered == "background":
         # This seems to work...
-        ret, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
 
     goal = GOOD_PANELS_GOAL  # 4 # desired arbitrary panel count $ Consider 5
     black_bg = True if isBlackBordered == "background" else False
@@ -234,7 +225,7 @@ def find_best_panels(image, resized, thresh, ratio, goal, leftIternations, right
         if i > error_iter:
             return comicPanels
         i += 1
-            # print('panels found:', panelsFound)
+        # print('panels found:', panelsFound)
 
     dont_erode = True if black_bg else False
     comicPanels = extract_comic_panels(resized.copy(), thresh, ratio, bestIteration, isBright, dont_erode)
@@ -304,6 +295,8 @@ def extract_comic_panels(resized, thresh, ratio, iter_num, isBright, dont_erode=
     # Erode to remove separete mixed panels.
     kernel = np.ones((2, 2), np.uint8)
 
+    # Eroding may reduce the strength of the black borders around the panels
+    # Right now it doesn't seem to be an issue
     # if not dont_erode:
     if isBright:
         dilation = cv2.dilate(thresh, kernel, iterations=1)
@@ -318,21 +311,9 @@ def extract_comic_panels(resized, thresh, ratio, iter_num, isBright, dont_erode=
     # eroded = cv2.erode(dilation,kernel,iterations = iter) #thresh #dilation
     # eroded = cv2.erode(dilation,kernel,iterations = 1)
 
-    # cv2.imwrite("eroded.png", eroded)
-
-    # if debug:
-    #     cv2.imshow("Eroded", eroded)
-    #     cv2.waitKey(0)
-
-    # print(cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
     cnts, hierarchy = cv2.findContours(eroded.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
 
     cv2.drawContours(resized, cnts, -1, (0, 255, 0), 3)
-
-    # cv2.imwrite("resized.png", resized)
-    # if debug:
-    #     cv2.imshow("Image", resized)
-    #     cv2.waitKey(0)
 
     # Area occupied by a possible large panel
     largePanelArea = 0
