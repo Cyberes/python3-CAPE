@@ -4,6 +4,12 @@ Forked from <https://github.com/CodeMinion/C.A.P.E>
 
 **C.A.P.E.** is a Python package used to extract individual panels from comic book pages.
 
+```bash
+./cape.py [input file or folder] [output folder]
+```
+
+You can add the flag `-d` to replicate the directory structure of the input folder.
+
 ### Features
 
 -   Extract individual panels.
